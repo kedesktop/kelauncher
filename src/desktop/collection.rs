@@ -20,9 +20,7 @@ impl EntryCollection {
                     .filter_map(|e| e.ok())
                     .filter(|e| {
                         e.file_type().is_file()
-                            && e.path().extension().map_or(false, |ext| {
-                                ext == "desktop"
-                            })
+                            && e.path().extension().map_or(false, |ext| ext == "desktop")
                     })
                     .filter_map(|e| Entry::from_file(e.path())),
             );
@@ -43,10 +41,17 @@ impl EntryCollection {
             .iter()
             .filter_map(|e| {
                 let name = e.name.to_lowercase();
+
                 if !seen.insert(name.clone()) {
                     return None;
                 }
-                match_span(&name, &q).map(|span| (e, span))
+
+                let best_span = std::iter::once(name.as_str())
+                    .chain(e.keywords.iter().map(|k| k.as_str()))
+                    .filter_map(|s| match_span(&s.to_lowercase(), &q))
+                    .min();
+
+                best_span.map(|span| (e, span))
             })
             .collect();
 
@@ -57,11 +62,11 @@ impl EntryCollection {
     fn get_applications_dirs() -> Vec<String> {
         let home = env::var("HOME").expect("$HOME is not in UTF-8");
 
-        let data_dirs = env::var("XDG_DATA_DIRS")
-            .unwrap_or_else(|_| "/usr/local/share:/usr/share".to_owned());
+        let data_dirs =
+            env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".to_owned());
 
-        let data_home = env::var("XDG_DATA_HOME")
-            .unwrap_or_else(|_| format!("{home}/.local/share"));
+        let data_home =
+            env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{home}/.local/share"));
 
         let mut dirs: Vec<String> = std::iter::once(data_home.as_str())
             .chain(data_dirs.split(':'))

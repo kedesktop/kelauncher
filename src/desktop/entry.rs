@@ -4,6 +4,7 @@ use std::path::Path;
 pub struct Entry {
     pub name: String,
     pub exec: String,
+    pub keywords: Vec<String>,
 
     pub is_term: bool,
 }
@@ -49,15 +50,18 @@ impl Entry {
                     if value.is_empty() {
                         return None;
                     }
-                    entry.exec = strip_field_codes(value)
-                        .trim()
-                        .trim_matches('"')
-                        .to_owned();
+                    entry.exec = strip_field_codes(value).trim().trim_matches('"').to_owned();
                 }
                 "NoDisplay" => {
                     if value == "true" {
                         return None;
                     }
+                }
+                "Keywords" => {
+                    entry.keywords = value
+                        .split(';')
+                        .map(|s| s.trim().to_lowercase().to_owned())
+                        .collect();
                 }
                 "Terminal" => entry.is_term = value == "true",
                 _ => {}
@@ -75,6 +79,7 @@ impl Entry {
         Entry {
             name: String::new(),
             exec: String::new(),
+            keywords: Vec::new(),
             is_term: false,
         }
     }
@@ -109,7 +114,6 @@ impl Entry {
             })
     }
 }
-
 
 fn strip_field_codes(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
