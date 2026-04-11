@@ -1,5 +1,4 @@
 use std::{
-    env,
     os::unix::process::CommandExt,
     process::{Command, Stdio},
 };
@@ -168,12 +167,13 @@ impl Application {
         frame.render_stateful_widget(list, chunks[0], &mut self.list_state);
 
         let search_text = if self.query.is_empty() {
-            Line::from(Span::styled(
-                "search...",
-                Style::default().fg(Color::from_u32(0x777777)),
-            ))
+            Line::from(vec![
+                Span::styled("> ", Style::default().bold().fg(Color::Cyan)),
+                Span::styled("search...", Style::default().fg(Color::from_u32(0x777777))),
+            ])
         } else {
             Line::from(vec![
+                Span::styled("> ", Style::default().bold().fg(Color::Cyan)),
                 Span::raw(self.query.as_str()),
                 Span::styled("⎸", Style::default().bold().fg(Color::Cyan)),
             ])
@@ -190,18 +190,3 @@ fn is_word_bound(c: char) -> bool {
     c.is_whitespace() || c.is_ascii_punctuation()
 }
 
-fn parent_process_path() -> Option<String> {
-    let ppid = std::fs::read_to_string("/proc/self/status")
-        .ok()?
-        .lines()
-        .find(|l| l.starts_with("PPid:"))?
-        .split_whitespace()
-        .nth(1)?
-        .trim()
-        .to_owned();
-
-    std::fs::read_link(format!("/proc/{}/exe", ppid))
-        .ok()?
-        .to_str()
-        .map(str::to_owned)
-}
