@@ -1,6 +1,5 @@
 use std::{
-    os::unix::process::CommandExt,
-    process::{Command, Stdio},
+    io::Error, os::unix::process::CommandExt, process::{Command, Stdio}
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
@@ -56,27 +55,24 @@ impl Application {
     fn execute(&self) -> bool {
         if let Some(exec) = &self.exec {
             if self.is_term {
-                let _ = Command::new("sh").arg("-c").arg(exec).exec();
+                notify_error(Command::new("sh").arg("-c").arg(exec).exec());
                 return false;
-            } else {
-                let result = Command::new("sh")
-                    .arg("-c")
-                    .arg(exec)
-                    .stderr(Stdio::null())
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .process_group(0)
-                    .spawn();
-
-                if let Err(e) = result {
-                    let _ = Command::new("notify-send")
-                        .arg("KeLauncher")
-                        .arg(format!("Failed to launch: {e}"))
-                        .spawn();
-                }
-
-                return true;
             }
+
+            let result = Command::new("sh")
+                .arg("-c")
+                .arg(exec)
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .process_group(0)
+                .spawn();
+
+            if let Err(e) = result {
+                notify_error(e);
+            }
+
+            return true;
         }
         return false;
     }
@@ -217,6 +213,15 @@ impl Application {
             chunks[1],
         );
     }
+}
+
+fn notify_error(e: Error) {
+    notify_rust::Notification::new()
+                    .appname("KeDesktop::KeLaunch")
+                    .summary("Error occured")
+                    .body(format!("Failed to launch: {e}").as_str())
+                    .show()
+                    .unwrap();
 }
 
 fn is_word_bound(c: char) -> bool {
