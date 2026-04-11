@@ -1,4 +1,5 @@
 use std::{
+    env,
     os::unix::process::CommandExt,
     process::{Command, Stdio},
 };
@@ -36,6 +37,7 @@ impl Application {
 
     pub fn run(&mut self) {
         let mut exec: Option<String> = None;
+        let mut is_term: bool = false;
 
         ratatui::run(|terminal| {
             loop {
@@ -89,6 +91,7 @@ impl Application {
                                 if let Some(entry) = self.entries.search(&self.query).get(selected)
                                 {
                                     exec = Some(entry.exec.clone());
+                                    is_term = entry.is_term;
                                     break;
                                 }
                             }
@@ -101,16 +104,21 @@ impl Application {
         });
 
         if let Some(exec) = exec {
-            let _ = Command::new("sh")
-                .arg("-c")
-                .arg(exec)
-                .stderr(Stdio::null())
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .process_group(0)
-                .spawn()
-                .expect("failed to run command");
-            std::process::exit(0);
+            if is_term {
+                let _ = Command::new("sh").arg("-c").arg(exec).exec();
+            } else {
+                let _ = Command::new("sh")
+                    .arg("-c")
+                    .arg(exec)
+                    .stderr(Stdio::null())
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .process_group(0)
+                    .spawn()
+                    .expect("failed to run command");
+
+                std::process::exit(0);
+            }
         }
     }
 
@@ -140,7 +148,7 @@ impl Application {
 
     fn draw(&mut self, frame: &mut ratatui::Frame) {
         let chunks =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).split(frame.area());
+            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(frame.area());
 
         let items: Vec<ListItem> = self
             .results
@@ -180,4 +188,20 @@ impl Application {
 
 fn is_word_bound(c: char) -> bool {
     c.is_whitespace() || c.is_ascii_punctuation()
+}
+
+fn parent_process_path() -> Option<String> {
+    let ppid = std::fs::read_to_string("/proc/self/status")
+        .ok()?
+        .lines()
+        .find(|l| l.starts_with("PPid:"))?
+        .split_whitespace()
+        .nth(1)?
+        .trim()
+        .to_owned();
+
+    std::fs::read_link(format!("/proc/{}/exe", ppid))
+        .ok()?
+        .to_str()
+        .map(str::to_owned)
 }

@@ -4,6 +4,8 @@ use std::path::Path;
 pub struct Entry {
     pub name: String,
     pub exec: String,
+
+    pub is_term: bool,
 }
 
 impl Entry {
@@ -41,6 +43,7 @@ impl Entry {
                         return None;
                     }
                 }
+
                 "Name" => entry.name = value.to_owned(),
                 "Exec" => {
                     if value.is_empty() {
@@ -57,6 +60,7 @@ impl Entry {
                         return None;
                     }
                 }
+                "Terminal" => entry.is_term = value == "true",
                 _ => {}
             }
         }
@@ -72,6 +76,7 @@ impl Entry {
         Entry {
             name: String::new(),
             exec: String::new(),
+            is_term: false,
         }
     }
 
