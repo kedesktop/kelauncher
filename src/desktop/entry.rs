@@ -49,11 +49,10 @@ impl Entry {
                     if value.is_empty() {
                         return None;
                     }
-                    entry.exec = if let Some((left, _)) = value.split_once('%') {
-                        left.trim().trim_matches('"').to_owned()
-                    } else {
-                        value.trim_matches('"').to_owned()
-                    };
+                    entry.exec = strip_field_codes(value)
+                        .trim()
+                        .trim_matches('"')
+                        .to_owned();
                 }
                 "NoDisplay" => {
                     if value == "true" {
@@ -109,4 +108,29 @@ impl Entry {
                     .unwrap_or(false)
             })
     }
+}
+
+
+fn strip_field_codes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            match chars.peek() {
+                Some(&code) if "fFuUdDnNickvm".contains(code) => {
+                    chars.next();
+                }
+                Some(&'%') => {
+                    chars.next();
+                    result.push('%');
+                }
+                _ => result.push('%'),
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
 }
