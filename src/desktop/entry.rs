@@ -4,9 +4,6 @@ use std::path::Path;
 pub struct Entry {
     pub name: String,
     pub exec: String,
-
-    pub keywords: Vec<String>,
-    pub categories: Vec<String>,
 }
 
 impl Entry {
@@ -34,10 +31,6 @@ impl Entry {
                 }
 
                 "exec" => {
-                    if value.is_empty() {
-                        return None;
-                    }
-
                     if let Some((left, _)) = value.split_once('%') {
                         entry.exec = left.trim_matches('"').to_owned();
                     } else {
@@ -45,28 +38,14 @@ impl Entry {
                     }
                 }
 
-                "keywords" => {
-                    entry.keywords = value
-                        .split(';')
-                        .map(|s| s.trim())
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_owned())
-                        .collect();
-                }
-
-                "categories" => {
-                    entry.categories = value
-                        .split(';')
-                        .map(|s| s.trim())
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_owned())
-                        .collect();
-                }
-
                 _ => {
                     continue;
                 }
             }
+        }
+
+        if entry.name.is_empty() || entry.exec.is_empty() {
+            return None;
         }
 
         Some(entry)
@@ -76,8 +55,6 @@ impl Entry {
         Entry {
             name: String::new(),
             exec: String::new(),
-            keywords: Vec::new(),
-            categories: Vec::new(),
         }
     }
 }

@@ -33,14 +33,22 @@ impl EntryCollection {
             return self.entries.iter().collect();
         }
 
-        self.entries
+        let q = query.to_lowercase();
+        let mut seen = std::collections::HashSet::new();
+        let mut results: Vec<(&Entry, usize)> = self
+            .entries
             .iter()
             .filter_map(|e| {
                 let name = e.name.to_lowercase();
-                match_span(&name, &query.to_lowercase()).map(|span| (e, span))
+                if !seen.insert(name.clone()) {
+                    return None;
+                }
+                match_span(&name, &q).map(|span| (e, span))
             })
-            .map(|(e, _)| e)
-            .collect()
+            .collect();
+
+        results.sort_by_key(|(_, span)| *span);
+        results.into_iter().map(|(e, _)| e).collect()
     }
 
     fn get_applications_dirs() -> Vec<String> {
@@ -62,6 +70,10 @@ impl EntryCollection {
 }
 
 fn match_span(haystack: &str, query: &str) -> Option<usize> {
+    if haystack.trim().is_empty() {
+        return None;
+    }
+
     let haystack: Vec<char> = haystack.chars().collect();
     let query: Vec<char> = query.chars().collect();
 
