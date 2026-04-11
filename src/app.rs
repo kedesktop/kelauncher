@@ -59,15 +59,21 @@ impl Application {
                 let _ = Command::new("sh").arg("-c").arg(exec).exec();
                 return false;
             } else {
-                let _ = Command::new("sh")
+                let result = Command::new("sh")
                     .arg("-c")
                     .arg(exec)
                     .stderr(Stdio::null())
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .process_group(0)
-                    .spawn()
-                    .expect("failed to run command");
+                    .spawn();
+
+                if let Err(e) = result {
+                    let _ = Command::new("notify-send")
+                        .arg("KeLauncher")
+                        .arg(format!("Failed to launch: {e}"))
+                        .spawn();
+                }
 
                 return true;
             }
