@@ -1,10 +1,9 @@
 [package]
-name = "app_launcher"
-version = "0.1.0"
+name = "kelaunch"
+version = "1.0.0"
 edition = "2024"
 
 [dependencies]
 crossterm = "0.29.0"
 ratatui = "0.30.0"
-strsim = "0.11.1"
 walkdir = "2.5.0"
