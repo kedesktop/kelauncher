@@ -5,7 +5,7 @@ use std::{
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Alignment, Constraint, Layout},
     prelude::Backend,
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -164,29 +164,29 @@ impl Application {
 
     fn draw(&mut self, frame: &mut ratatui::Frame) {
         let chunks =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(frame.area());
+            Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).split(frame.area());
 
         let items: Vec<ListItem> = self
             .results
             .iter()
-            .map(|name| ListItem::new(Line::from(Span::raw(name.as_str()))))
+            .map(|name| {
+                ListItem::new(
+                    Line::from(Span::raw(name.as_str()))
+                        .style(Style::new().fg(Color::from_u32(0x777777))),
+                )
+            })
             .collect();
 
         let list = List::new(items)
-            .highlight_style(
-                Style::default()
-                    .fg(Color::from_u32(0xD34F6D))
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("▌ ")
-            .block(Block::default().padding(Padding::new(2, 2, 0, 0)));
+            .highlight_style(Style::default().fg(Color::White))
+            .block(Block::default().padding(Padding::new(3, 3, 1, 0)));
 
         frame.render_stateful_widget(list, chunks[0], &mut self.list_state);
 
         let search_text = if self.query.is_empty() {
             Line::from(vec![
                 Span::styled("> ", Style::default().bold().fg(Color::Cyan)),
-                Span::styled("search...", Style::default().fg(Color::from_u32(0x777777))),
+                Span::styled("search...", Style::default().fg(Color::from_u32(0x555555))),
             ])
         } else {
             Line::from(vec![
@@ -196,10 +196,10 @@ impl Application {
             ])
         };
 
-        let search =
-            Paragraph::new(search_text).block(Block::default().padding(Padding::horizontal(2)));
-
-        frame.render_widget(search, chunks[1]);
+        frame.render_widget(
+            Paragraph::new(search_text).block(Block::default().padding(Padding::new(2, 2, 1, 0))),
+            chunks[1],
+        );
     }
 }
 
