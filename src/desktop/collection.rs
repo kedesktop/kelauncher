@@ -19,7 +19,9 @@ impl EntryCollection {
                     .filter_map(|e| e.ok())
                     .filter(|e| {
                         e.file_type().is_file()
-                            && e.path().extension().map_or(false, |ext| ext == "desktop")
+                            && e.path().extension().map_or(false, |ext| {
+                                ext == "desktop"
+                            })
                     })
                     .filter_map(|e| Entry::from_file(e.path())),
             );
@@ -64,7 +66,7 @@ impl EntryCollection {
         }
         .split(':')
         .filter(|s| !s.is_empty() && fs::metadata(s).map_or(false, |md| md.is_dir()))
-        .map(str::to_owned)
+        .map(|s| format!("{s}/applications"))
         .collect()
     }
 }

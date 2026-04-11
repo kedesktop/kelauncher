@@ -8,43 +8,60 @@ pub struct Entry {
 
 impl Entry {
     pub fn from_file(desktop_file_path: &Path) -> Option<Entry> {
+        let content = std::fs::read_to_string(desktop_file_path).ok()?;
         let mut entry = Entry::init();
-        let file = ini::ini!(desktop_file_path.to_str()?);
+        let mut in_desktop_entry = false;
 
-        if !file.contains_key("desktop entry") {
-            return None;
-        }
+        for line in content.lines() {
+            let line = line.trim();
 
-        for (key, val_buf) in &file["desktop entry"] {
-            let value = val_buf.as_ref()?;
+            if line.starts_with('[') {
+                in_desktop_entry = line == "[Desktop Entry]";
+                continue;
+            }
 
-            match key.as_str() {
-                "type" => {
+            if !in_desktop_entry || line.starts_with('#') || line.is_empty() {
+                continue;
+            }
+
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+
+            if key.contains('[') {
+                continue;
+            }
+
+            let key = key.trim();
+            let value = value.trim();
+
+            match key {
+                "Type" => {
                     if value != "Application" {
                         return None;
                     }
                 }
-
-                "name" => {
-                    entry.name = value.to_owned();
-                    continue;
-                }
-
-                "exec" => {
-                    if let Some((left, _)) = value.split_once('%') {
-                        entry.exec = left.trim_matches('"').to_owned();
+                "Name" => entry.name = value.to_owned(),
+                "Exec" => {
+                    if value.is_empty() {
+                        return None;
+                    }
+                    entry.exec = if let Some((left, _)) = value.split_once('%') {
+                        left.trim().trim_matches('"').to_owned()
                     } else {
-                        entry.exec = value.trim_matches('"').to_owned();
+                        value.trim_matches('"').to_owned()
+                    };
+                }
+                "NoDisplay" => {
+                    if value == "true" {
+                        return None;
                     }
                 }
-
-                _ => {
-                    continue;
-                }
+                _ => {}
             }
         }
 
-        if entry.name.is_empty() || entry.exec.is_empty() {
+        if entry.name.is_empty() || entry.exec.is_empty() || !entry.is_exec_valid() {
             return None;
         }
 
@@ -56,5 +73,35 @@ impl Entry {
             name: String::new(),
             exec: String::new(),
         }
+    }
+
+    fn is_exec_valid(&self) -> bool {
+        let mut parts = self.exec.split_whitespace();
+
+        let Some(cmd) = parts.next() else {
+            return false;
+        };
+
+        if cmd.starts_with('/') {
+            return std::fs::metadata(cmd)
+                .map(|m| {
+                    use std::os::unix::fs::PermissionsExt;
+                    m.is_file() && m.permissions().mode() & 0o111 != 0
+                })
+                .unwrap_or(false);
+        }
+
+        std::env::var("PATH")
+            .unwrap_or_default()
+            .split(':')
+            .map(|dir| std::path::Path::new(dir).join(cmd))
+            .any(|path| {
+                std::fs::metadata(&path)
+                    .map(|m| {
+                        use std::os::unix::fs::PermissionsExt;
+                        m.is_file() && m.permissions().mode() & 0o111 != 0
+                    })
+                    .unwrap_or(false)
+            })
     }
 }

@@ -155,7 +155,7 @@ impl Application {
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("▌ ")
-            .block(Block::default().padding(Padding::new(2, 2, 1, 0)));
+            .block(Block::default().padding(Padding::new(2, 2, 0, 0)));
 
         frame.render_stateful_widget(list, chunks[0], &mut self.list_state);
 
@@ -172,7 +172,7 @@ impl Application {
         };
 
         let search =
-            Paragraph::new(search_text).block(Block::default().padding(Padding::new(2, 2, 0, 0)));
+            Paragraph::new(search_text).block(Block::default().padding(Padding::horizontal(2)));
 
         frame.render_widget(search, chunks[1]);
     }
