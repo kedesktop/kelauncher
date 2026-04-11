@@ -105,13 +105,23 @@ impl Application {
         if let Ok(Event::Key(key)) = event::read() {
             match key.code {
                 KeyCode::Char(c) => {
-                    if c == 'h' && key.modifiers == KeyModifiers::CONTROL {
-                        self.delete_last_word();
-                        self.refresh_results();
-                    } else {
-                        self.query.push(c);
-                        self.refresh_results();
+                    if key.modifiers == KeyModifiers::CONTROL {
+                        match c {
+                            'h' => {
+                                self.delete_last_word();
+                                self.refresh_results();
+                                return true;
+                            }
+                            'q' => {
+                                return false;
+                            }
+
+                            _ => {}
+                        }
                     }
+
+                    self.query.push(c);
+                    self.refresh_results();
                 }
                 KeyCode::Backspace => {
                     if key.modifiers == KeyModifiers::CONTROL {
