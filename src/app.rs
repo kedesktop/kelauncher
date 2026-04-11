@@ -5,9 +5,9 @@ use std::{
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
-    layout::{Alignment, Constraint, Layout},
+    layout::{Constraint, Layout},
     prelude::Backend,
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, List, ListItem, ListState, Padding, Paragraph},
 };
