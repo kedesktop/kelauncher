@@ -6,6 +6,7 @@ use std::{
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Layout},
+    prelude::Backend,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, List, ListItem, ListState, Padding, Paragraph},
@@ -19,6 +20,8 @@ pub struct Application {
     entries: desktop::EntryCollection,
 
     results: Vec<String>,
+    exec: Option<String>,
+    is_term: bool,
 }
 
 impl Application {
@@ -31,80 +34,30 @@ impl Application {
             query: String::new(),
             entries,
             results,
+            exec: None,
+            is_term: false,
         }
     }
 
     pub fn run(&mut self) {
-        let mut exec: Option<String> = None;
-        let mut is_term: bool = false;
-
         ratatui::run(|terminal| {
             loop {
-                let _ = terminal.draw(|f| self.draw(f));
-
-                if let Ok(Event::Key(key)) = event::read() {
-                    match key.code {
-                        KeyCode::Char(c) => {
-                            if c == 'h' && key.modifiers == KeyModifiers::CONTROL {
-                                self.delete_last_word();
-                                self.refresh_results();
-                            } else {
-                                self.query.push(c);
-                                self.refresh_results();
-                            }
-                        }
-                        KeyCode::Backspace => {
-                            if key.modifiers == KeyModifiers::CONTROL {
-                                self.delete_last_word();
-                            } else {
-                                self.query.pop();
-                            }
-                            self.refresh_results();
-                        }
-                        KeyCode::Down => {
-                            let len = self.results.len();
-                            if len == 0 {
-                                continue;
-                            }
-                            let next = self
-                                .list_state
-                                .selected()
-                                .map(|i| (i + 1) % len)
-                                .unwrap_or(0);
-                            self.list_state.select(Some(next));
-                        }
-                        KeyCode::Up => {
-                            let len = self.results.len();
-                            if len == 0 {
-                                continue;
-                            }
-                            let prev = self
-                                .list_state
-                                .selected()
-                                .map(|i| if i == 0 { len - 1 } else { i - 1 })
-                                .unwrap_or(0);
-                            self.list_state.select(Some(prev));
-                        }
-                        KeyCode::Enter => {
-                            if let Some(selected) = self.list_state.selected() {
-                                if let Some(entry) = self.entries.search(&self.query).get(selected)
-                                {
-                                    exec = Some(entry.exec.clone());
-                                    is_term = entry.is_term;
-                                    break;
-                                }
-                            }
-                        }
-                        KeyCode::Esc => break,
-                        _ => {}
-                    }
+                if !self.on_frame(terminal) {
+                    break;
                 }
             }
         });
 
-        if let Some(exec) = exec {
-            if is_term {
+        if self.execute() {
+            std::process::exit(0);
+        }
+    }
+
+    fn execute(&self) -> bool {
+        if let Some(exec) = &self.exec {
+            if self.is_term {
                 let _ = Command::new("sh").arg("-c").arg(exec).exec();
+                return false;
             } else {
                 let _ = Command::new("sh")
                     .arg("-c")
@@ -116,9 +69,10 @@ impl Application {
                     .spawn()
                     .expect("failed to run command");
 
-                std::process::exit(0);
+                return true;
             }
         }
+        return false;
     }
 
     fn delete_last_word(&mut self) {
@@ -143,6 +97,69 @@ impl Application {
             .map(|e| e.name.clone())
             .collect();
         self.list_state.select(Some(0));
+    }
+
+    fn on_frame(&mut self, terminal: &mut ratatui::Terminal<impl Backend>) -> bool {
+        let _ = terminal.draw(|f| self.draw(f));
+
+        if let Ok(Event::Key(key)) = event::read() {
+            match key.code {
+                KeyCode::Char(c) => {
+                    if c == 'h' && key.modifiers == KeyModifiers::CONTROL {
+                        self.delete_last_word();
+                        self.refresh_results();
+                    } else {
+                        self.query.push(c);
+                        self.refresh_results();
+                    }
+                }
+                KeyCode::Backspace => {
+                    if key.modifiers == KeyModifiers::CONTROL {
+                        self.delete_last_word();
+                    } else {
+                        self.query.pop();
+                    }
+                    self.refresh_results();
+                }
+                KeyCode::Down => {
+                    let len = self.results.len();
+                    if len == 0 {
+                        return true;
+                    }
+                    let next = self
+                        .list_state
+                        .selected()
+                        .map(|i| (i + 1) % len)
+                        .unwrap_or(0);
+                    self.list_state.select(Some(next));
+                }
+                KeyCode::Up => {
+                    let len = self.results.len();
+                    if len == 0 {
+                        return true;
+                    }
+                    let prev = self
+                        .list_state
+                        .selected()
+                        .map(|i| if i == 0 { len - 1 } else { i - 1 })
+                        .unwrap_or(0);
+                    self.list_state.select(Some(prev));
+                }
+                KeyCode::Enter => {
+                    if let Some(selected) = self.list_state.selected() {
+                        if let Some(entry) = self.entries.search(&self.query).get(selected) {
+                            self.exec = Some(entry.exec.clone());
+                            self.is_term = entry.is_term;
+                            return false;
+                        }
+                    }
+                }
+                KeyCode::Esc => return false,
+                _ => {}
+            }
+        }
+
+        true
     }
 
     fn draw(&mut self, frame: &mut ratatui::Frame) {
@@ -189,4 +206,3 @@ impl Application {
 fn is_word_bound(c: char) -> bool {
     c.is_whitespace() || c.is_ascii_punctuation()
 }
-
