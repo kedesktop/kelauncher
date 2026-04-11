@@ -15,6 +15,7 @@ impl EntryCollection {
         for dir in Self::get_applications_dirs() {
             collection.entries.extend(
                 walkdir::WalkDir::new(dir)
+                    .follow_links(true)
                     .into_iter()
                     .filter_map(|e| e.ok())
                     .filter(|e| {
@@ -54,20 +55,29 @@ impl EntryCollection {
     }
 
     fn get_applications_dirs() -> Vec<String> {
-        if let (Ok(xdg_dirs), Ok(home_dirs)) =
-            (env::var("XDG_DATA_DIRS"), env::var("XDG_DATA_HOME"))
-        {
-            format!("{xdg_dirs}:{home_dirs}")
-        } else {
-            format!(
-                "/usr/share:/usr/local/share:{}/.local/share",
-                env::var("HOME").expect("$HOME is not in UTF-8")
-            )
-        }
-        .split(':')
-        .filter(|s| !s.is_empty() && fs::metadata(s).map_or(false, |md| md.is_dir()))
-        .map(|s| format!("{s}/applications"))
-        .collect()
+        let home = env::var("HOME").expect("$HOME is not in UTF-8");
+
+        let data_dirs = env::var("XDG_DATA_DIRS")
+            .unwrap_or_else(|_| "/usr/local/share:/usr/share".to_owned());
+
+        let data_home = env::var("XDG_DATA_HOME")
+            .unwrap_or_else(|_| format!("{home}/.local/share"));
+
+        let mut dirs: Vec<String> = std::iter::once(data_home.as_str())
+            .chain(data_dirs.split(':'))
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_owned())
+            .collect();
+
+        dirs.push("/var/lib/flatpak/exports/share".to_owned());
+        dirs.push(format!("{home}/.local/share/flatpak/exports/share"));
+
+        let mut seen = std::collections::HashSet::new();
+        dirs.into_iter()
+            .filter(|d| seen.insert(d.clone()))
+            .map(|d| format!("{d}/applications"))
+            .filter(|d| fs::metadata(d).map_or(false, |md| md.is_dir()))
+            .collect()
     }
 }
 
