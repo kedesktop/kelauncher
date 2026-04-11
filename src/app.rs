@@ -1,4 +1,4 @@
-use std::{os::unix::process::CommandExt, process::Command};
+use std::{os::unix::process::CommandExt, process::{Command, Stdio}};
 
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
@@ -25,6 +25,8 @@ impl Application {
     }
 
     pub fn run(&mut self) {
+        let mut exec: Option<String> = None;
+
         ratatui::run(|terminal| {
             loop {
                 if let Ok(Event::Key(key)) = event::read() {
@@ -37,10 +39,11 @@ impl Application {
                         KeyCode::Up => self.list_state.select_previous(),
                         KeyCode::Enter => {
                             if let Some(selected) = self.list_state.selected() {
-                                let _ = Command::new("sh")
-                                    .arg("-c")
-                                    .arg(&self.entries.search(&self.query)[selected].exec)
-                                    .exec();
+                                if let Some(entry) = self.entries.search(&self.query).get(selected)
+                                {
+                                    exec = Some(entry.exec.clone());
+                                }
+                                break;
                             }
                         }
                         KeyCode::Esc => break,
@@ -50,7 +53,20 @@ impl Application {
 
                 let _ = terminal.draw(|f| self.draw(f));
             }
-        })
+        });
+
+        if let Some(exec) = exec {
+            let _ = Command::new("sh")
+                .arg("-c")
+                .arg(exec)
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .process_group(0)
+                .spawn()
+                .expect("failed to run command");
+            std::process::exit(0);
+        }
     }
 
     fn draw(&mut self, frame: &mut ratatui::Frame) {
