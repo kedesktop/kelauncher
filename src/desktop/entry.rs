@@ -110,8 +110,7 @@ impl Entry {
     }
 }
 
-/// Strip Desktop Entry Spec field codes (%f, %F, %u, %U, etc.) from an Exec value.
-/// `%%` is replaced with a literal `%`. Unknown `%` sequences are preserved.
+
 fn strip_field_codes(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
