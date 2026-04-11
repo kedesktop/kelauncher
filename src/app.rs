@@ -1,4 +1,7 @@
-use std::{os::unix::process::CommandExt, process::{Command, Stdio}};
+use std::{
+    os::unix::process::CommandExt,
+    process::{Command, Stdio},
+};
 
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
@@ -18,7 +21,7 @@ pub struct Application {
 impl Application {
     pub fn new() -> Application {
         Application {
-            list_state: ListState::default(),
+            list_state: ListState::default().with_selected(Some(0)),
             query: String::new(),
             entries: desktop::EntryCollection::collect(),
         }
@@ -31,9 +34,13 @@ impl Application {
             loop {
                 if let Ok(Event::Key(key)) = event::read() {
                     match key.code {
-                        KeyCode::Char(c) => self.query.push(c),
+                        KeyCode::Char(c) => {
+                            self.query.push(c);
+                            self.list_state.select(Some(0));
+                        }
                         KeyCode::Backspace => {
                             self.query.pop();
+                            self.list_state.select(Some(0));
                         }
                         KeyCode::Down => self.list_state.select_next(),
                         KeyCode::Up => self.list_state.select_previous(),
