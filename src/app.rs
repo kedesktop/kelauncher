@@ -22,6 +22,8 @@ use crate::{desktop, theme};
 
 pub struct Application {
     theme: theme::Theme,
+    cursor_visible: bool,
+    last_blink: std::time::Instant,
 
     list_state: ListState,
     query: String,
@@ -51,6 +53,8 @@ impl Application {
 
         Application {
             theme,
+            cursor_visible: true,
+            last_blink: std::time::Instant::now(),
             list_state: ListState::default().with_selected(Some(0)),
             query: String::new(),
             entries,
@@ -141,16 +145,24 @@ impl Application {
     }
 
     fn on_frame(&mut self, terminal: &mut ratatui::Terminal<impl Backend>) -> bool {
-        let _ = terminal.draw(|f| self.draw(f));
-
-        if let Ok(event) = event::read() {
-            match event {
-                Event::Key(key) => return self.handle_key(key),
-                Event::Mouse(mouse) => return self.handle_mouse(mouse),
-                _ => {}
-            }
+        if self.last_blink.elapsed()
+            >= std::time::Duration::from_millis(self.theme.cursor_blink_time)
+        {
+            self.cursor_visible = !self.cursor_visible;
+            self.last_blink = std::time::Instant::now();
         }
 
+        let _ = terminal.draw(|f| self.draw(f));
+
+        if event::poll(std::time::Duration::from_millis(16)).unwrap_or(false) {
+            if let Ok(ev) = event::read() {
+                match ev {
+                    Event::Key(key) => return self.handle_key(key),
+                    Event::Mouse(mouse) => return self.handle_mouse(mouse),
+                    _ => {}
+                }
+            }
+        }
         true
     }
 
@@ -162,19 +174,15 @@ impl Application {
                         'h' => {
                             self.delete_last_word();
                             self.refresh_results();
-                            return true;
-                        }
-                        'q' => {
-                            return false;
                         }
                         'u' => {
                             self.query.clear();
                             self.refresh_results();
-                            return true;
                         }
-
+                        'q' => return false,
                         _ => {}
                     }
+                    return true;
                 }
 
                 self.query.push(c);
@@ -307,6 +315,12 @@ impl Application {
 
         frame.render_stateful_widget(list, chunks[0], &mut self.list_state);
 
+        let cursor = if self.cursor_visible {
+            Span::styled("⎸", t.cursor)
+        } else {
+            Span::raw(" ")
+        };
+
         let search_text = if self.query.is_empty() {
             Line::from(vec![
                 Span::styled(&t.prompt_str, t.prompt),
@@ -316,7 +330,7 @@ impl Application {
             Line::from(vec![
                 Span::styled(&t.prompt_str, t.prompt),
                 Span::raw(self.query.as_str()),
-                Span::styled("⎸", t.cursor),
+                cursor,
             ])
         };
 
