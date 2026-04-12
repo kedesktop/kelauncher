@@ -206,24 +206,39 @@ impl Application {
 
     fn handle_mouse(&mut self, mouse: MouseEvent) -> bool {
         match mouse.kind {
-            MouseEventKind::ScrollDown => self.select_next(),
-            MouseEventKind::ScrollUp => self.select_prev(),
+            MouseEventKind::ScrollDown => self.scroll_down(),
+            MouseEventKind::ScrollUp => self.scroll_up(),
+            MouseEventKind::Moved => {
+                let top_pad = self.theme.padding_list.2;
+                let offset = self.list_state.offset();
+                let hovered = mouse.row.saturating_sub(top_pad) as usize + offset;
+                if hovered < self.results.len() {
+                    self.list_state.select(Some(hovered));
+                }
+            }
             MouseEventKind::Down(MouseButton::Left) => {
-                /* figure out the clicked row */
-                let t = &self.theme;
-                let (_, top_pad, _) = (t.padding_list.0, t.padding_list.2, t.padding_list.3);
-                let clicked_row = mouse.row.saturating_sub(top_pad) as usize;
-
-                if clicked_row < self.results.len() {
-                    if self.list_state.selected() == Some(clicked_row) {
-                        return self.select_current();
-                    }
-                    self.list_state.select(Some(clicked_row));
+                let top_pad = self.theme.padding_list.2;
+                let offset = self.list_state.offset();
+                let clicked = mouse.row.saturating_sub(top_pad) as usize + offset;
+                if clicked < self.results.len() {
+                    self.list_state.select(Some(clicked));
+                    return self.select_current();
                 }
             }
             _ => {}
         }
         true
+    }
+
+    fn scroll_down(&mut self) {
+        let max_offset = self.results.len().saturating_sub(1);
+        let offset = self.list_state.offset_mut();
+        *offset = (*offset + 1).min(max_offset);
+    }
+
+    fn scroll_up(&mut self) {
+        let offset = self.list_state.offset_mut();
+        *offset = offset.saturating_sub(1);
     }
 
     fn select_next(&mut self) {
