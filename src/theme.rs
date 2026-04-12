@@ -3,6 +3,7 @@ use ratatui::style::{Color, Modifier, Style};
 pub struct Theme {
     pub prompt: Style,
     pub cursor: Style,
+    pub count: Style,
     pub placeholder: Style,
     pub item_normal: Style,
     pub item_selected: Style,
@@ -19,6 +20,7 @@ impl Default for Theme {
         Theme {
             prompt:           Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
             cursor:           Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            count:            Style::default().fg(Color::from_u32(0x555555)),
             placeholder:      Style::default().fg(Color::from_u32(0x555555)),
             item_normal:      Style::default().fg(Color::from_u32(0x777777)),
             item_selected:    Style::default().fg(Color::White),

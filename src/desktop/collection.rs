@@ -54,9 +54,12 @@ impl EntryCollection {
                 best_span.map(|span| {
                     let usage = history.map(|h| h[&e.name]).unwrap_or(0);
 
-                    /* note: tweak to increase which matters more */
-                    const TIGHTNESS_WEIGHT: usize = 2;
-                    const USAGE_WEIGHT: usize = 0;
+                    /* NOTE:
+                     * on TIGHTNESS_WEIGHT lower  IS better
+                     * on USAGE_WEIGHT     higher IS better
+                     */
+                    const TIGHTNESS_WEIGHT: usize = 100;
+                    const USAGE_WEIGHT: usize = 30;
 
                     let score =
                         (span * TIGHTNESS_WEIGHT).saturating_sub(usage as usize * USAGE_WEIGHT);
@@ -77,6 +80,10 @@ impl EntryCollection {
         }
 
         None
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
     }
 
     fn get_applications_dirs() -> Vec<String> {
