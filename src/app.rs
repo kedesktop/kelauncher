@@ -4,9 +4,13 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crossterm::{event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind
-}, execute};
+use crossterm::{
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
+        MouseButton, MouseEvent, MouseEventKind,
+    },
+    execute,
+};
 use ratatui::{
     layout::{Constraint, Layout},
     prelude::Backend,
@@ -40,7 +44,7 @@ impl Application {
 
         let entries = desktop::EntryCollection::collect();
         let results = entries
-            .search("", None)
+            .search("", Some(&history))
             .iter()
             .map(|e| e.name.clone())
             .collect();

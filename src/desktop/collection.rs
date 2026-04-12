@@ -31,7 +31,11 @@ impl EntryCollection {
 
     pub fn search(&self, query: &str, history: Option<&EntryHistory>) -> Vec<&Entry> {
         if query.is_empty() {
-            return self.entries.iter().collect();
+            let mut entries: Vec<&Entry> = self.entries.iter().collect();
+            if let Some(h) = history {
+                entries.sort_by_key(|e| std::cmp::Reverse(h[&e.name]));
+            }
+            return entries;
         }
 
         let q = query.to_lowercase();
