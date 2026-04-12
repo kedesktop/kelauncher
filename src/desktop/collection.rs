@@ -53,8 +53,13 @@ impl EntryCollection {
 
                 best_span.map(|span| {
                     let usage = history.map(|h| h[&e.name]).unwrap_or(0);
-                    /* scale span up, subtract weighted usage so higher usage = lower sort key */
-                    let score = (span * 10).saturating_sub(usage as usize * 3);
+
+                    /* note: tweak to increase which matters more */
+                    const TIGHTNESS_WEIGHT: usize = 2;
+                    const USAGE_WEIGHT: usize = 0;
+
+                    let score =
+                        (span * TIGHTNESS_WEIGHT).saturating_sub(usage as usize * USAGE_WEIGHT);
                     (e, score)
                 })
             })
