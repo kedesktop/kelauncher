@@ -2,9 +2,9 @@ use std::path::Path;
 
 #[derive(Debug)]
 pub struct Entry {
-    pub name: String,
-    pub exec: String,
-    pub keywords: Vec<String>,
+    pub name: Box<str>,
+    pub exec: Box<str>,
+    pub keywords: Box<[Box<str>]>,
 
     pub is_term: bool,
 }
@@ -12,8 +12,12 @@ pub struct Entry {
 impl Entry {
     pub fn from_file(desktop_file_path: &Path) -> Option<Entry> {
         let content = std::fs::read_to_string(desktop_file_path).ok()?;
-        let mut entry = Entry::init();
         let mut in_desktop_entry = false;
+
+        let mut name: Option<Box<str>> = None;
+        let mut exec: Option<Box<str>> = None;
+        let mut keywords: Option<Box<[Box<str>]>> = None;
+        let mut is_term: bool = false;
 
         for line in content.lines() {
             let line = line.trim();
@@ -45,12 +49,12 @@ impl Entry {
                     }
                 }
 
-                "Name" => entry.name = value.to_owned(),
+                "Name" => name = Some(value.into()),
                 "Exec" => {
                     if value.is_empty() {
                         return None;
                     }
-                    entry.exec = strip_field_codes(value).trim().trim_matches('"').to_owned();
+                    exec = Some(strip_field_codes(value).trim().trim_matches('"').into());
                 }
                 "NoDisplay" => {
                     if value == "true" {
@@ -58,34 +62,41 @@ impl Entry {
                     }
                 }
                 "Keywords" => {
-                    entry.keywords = value
-                        .split(';')
-                        .map(|s| s.trim().to_lowercase().to_owned())
-                        .collect();
+                    keywords = Some(
+                        value
+                            .split(';')
+                            .map(|s| Box::from(s.trim().to_lowercase()))
+                            .collect::<Vec<Box<str>>>()
+                            .into_boxed_slice(),
+                    );
                 }
-                "Terminal" => entry.is_term = value == "true",
+                "Terminal" => is_term = value == "true",
                 _ => {}
             }
         }
 
-        if entry.name.is_empty() || entry.exec.is_empty() || !entry.is_exec_valid() {
+        let (Some(name), Some(exec)) = (name, exec) else {
+            return None;
+        };
+
+        if name.is_empty() || !Self::is_exec_valid(&exec) {
             return None;
         }
 
-        Some(entry)
+        Some(Entry {
+            name,
+            exec,
+            keywords: keywords.unwrap_or_default(),
+            is_term,
+        })
     }
 
-    fn init() -> Entry {
-        Entry {
-            name: String::new(),
-            exec: String::new(),
-            keywords: Vec::new(),
-            is_term: false,
+    fn is_exec_valid(exec: &str) -> bool {
+        if exec.is_empty() {
+            return false;
         }
-    }
 
-    fn is_exec_valid(&self) -> bool {
-        let mut parts = self.exec.split_whitespace();
+        let mut parts = exec.split_whitespace();
 
         let Some(cmd) = parts.next() else {
             return false;

@@ -7,7 +7,7 @@ use std::{
 };
 
 pub struct EntryHistory {
-    entries: HashMap<String, u32>,
+    entries: HashMap<Box<str>, u32>,
     file_path: PathBuf,
 }
 
@@ -43,7 +43,7 @@ impl EntryHistory {
             }
             if let Some((num, name)) = line.split_once(' ') {
                 if let Ok(n) = num.parse::<u32>() {
-                    self.entries.insert(name.trim().to_owned(), n);
+                    self.entries.insert(name.trim().into(), n);
                 }
             }
         }
@@ -82,6 +82,9 @@ impl Index<&str> for EntryHistory {
 
 impl IndexMut<&str> for EntryHistory {
     fn index_mut(&mut self, name: &str) -> &mut u32 {
-        self.entries.entry(name.to_owned()).or_insert(0)
+        if !self.entries.contains_key(name) {
+            self.entries.insert(Box::from(name), 0);
+        }
+        self.entries.get_mut(name).unwrap()
     }
 }

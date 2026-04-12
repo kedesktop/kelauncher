@@ -11,30 +11,20 @@ use crossterm::{
     },
     execute,
 };
-use ratatui::{
-    layout::{Constraint, Layout},
-    prelude::Backend,
-    text::{Line, Span},
-    widgets::{Block, List, ListItem, ListState, Paragraph},
-};
+use ratatui::prelude::Backend;
 
-use crate::{desktop, theme};
+use crate::{desktop, theme, ui::AppUI};
 
 pub struct Application {
     theme: theme::Theme,
-    cursor_visible: bool,
-    last_blink: std::time::Instant,
-
-    list_state: ListState,
+    ui: AppUI,
     query: String,
 
     entries: desktop::EntryCollection,
     history: desktop::EntryHistory,
 
-    results: Vec<String>,
-    exec: Option<String>,
-    name: Option<String>,
-    is_term: bool,
+    results: Vec<(usize, usize)>,
+    selected: Option<usize>,
 }
 
 impl Application {
@@ -45,25 +35,19 @@ impl Application {
         });
 
         let entries = desktop::EntryCollection::collect();
-        let results = entries
-            .search("", Some(&history))
-            .iter()
-            .map(|e| e.name.clone())
-            .collect();
 
-        Application {
+        let mut app = Application {
             theme,
-            cursor_visible: true,
-            last_blink: std::time::Instant::now(),
-            list_state: ListState::default().with_selected(Some(0)),
+            ui: AppUI::new(),
             query: String::new(),
             entries,
-            history: history,
-            results,
-            exec: None,
-            name: None,
-            is_term: false,
-        }
+            history,
+            results: Vec::new(),
+            selected: None,
+        };
+
+        app.entries.search("", &app.history, &mut app.results);
+        app
     }
 
     pub fn run(&mut self) {
@@ -85,17 +69,18 @@ impl Application {
     }
 
     fn execute(&mut self) -> bool {
-        if let Some(exec) = &self.exec {
-            if self.is_term {
-                notify_error(Command::new("sh").arg("-c").arg(exec).exec());
-                self.save();
+        if let Some(idx) = self.selected {
+            let entry = &self.entries[idx];
 
+            if entry.is_term {
+                notify_error(Command::new("sh").arg("-c").arg(entry.exec.as_ref()).exec());
+                self.save();
                 return false;
             }
 
             let result = Command::new("sh")
                 .arg("-c")
-                .arg(exec)
+                .arg(entry.exec.as_ref())
                 .stderr(Stdio::null())
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
@@ -106,7 +91,6 @@ impl Application {
                 notify_error(e);
             }
             self.save();
-
             return true;
         }
 
@@ -114,9 +98,11 @@ impl Application {
     }
 
     fn save(&mut self) {
-        self.history[self.name.as_ref().unwrap()] += 1;
-        if let Err(err) = self.history.save() {
-            eprintln!("Failed to save history: {}", err);
+        if let Some(idx) = self.selected {
+            self.history[&*self.entries[idx].name] += 1;
+            if let Err(err) = self.history.save() {
+                eprintln!("Failed to save history: {}", err);
+            }
         }
     }
 
@@ -135,24 +121,19 @@ impl Application {
     }
 
     fn refresh_results(&mut self) {
-        self.results = self
-            .entries
-            .search(&self.query, Some(&self.history))
-            .iter()
-            .map(|e| e.name.clone())
-            .collect();
-        self.list_state.select(Some(0));
+        self.entries
+            .search(&self.query, &self.history, &mut self.results);
+        self.ui.mark_dirty();
+        self.ui.list_state.select(Some(0));
     }
 
     fn on_frame(&mut self, terminal: &mut ratatui::Terminal<impl Backend>) -> bool {
-        if self.last_blink.elapsed()
-            >= std::time::Duration::from_millis(self.theme.cursor_blink_time)
-        {
-            self.cursor_visible = !self.cursor_visible;
-            self.last_blink = std::time::Instant::now();
-        }
+        self.ui.tick(self.theme.cursor_blink_time);
 
-        let _ = terminal.draw(|f| self.draw(f));
+        let _ = terminal.draw(|f| {
+            self.ui
+                .draw(f, &self.theme, &self.entries, &self.results, &self.query)
+        });
 
         if event::poll(std::time::Duration::from_millis(16)).unwrap_or(false) {
             if let Ok(ev) = event::read() {
@@ -184,7 +165,6 @@ impl Application {
                     }
                     return true;
                 }
-
                 self.query.push(c);
                 self.refresh_results();
             }
@@ -197,39 +177,38 @@ impl Application {
                 self.refresh_results();
             }
             KeyCode::Tab => {
-                if let Some(top) = self.results.first() {
-                    self.query = top.clone();
+                if let Some(&top) = self.results.first() {
+                    self.query = self.entries[top.0].name.to_string();
                     self.refresh_results();
                 }
             }
-            KeyCode::Down => self.select_next(),
-            KeyCode::Up => self.select_prev(),
+            KeyCode::Down => self.ui.select_next(self.results.len()),
+            KeyCode::Up => self.ui.select_prev(self.results.len()),
             KeyCode::Enter => return self.select_current(),
             KeyCode::Esc => return false,
             _ => {}
         }
-
         true
     }
 
     fn handle_mouse(&mut self, mouse: MouseEvent) -> bool {
         match mouse.kind {
-            MouseEventKind::ScrollDown => self.scroll_down(),
-            MouseEventKind::ScrollUp => self.scroll_up(),
+            MouseEventKind::ScrollDown => self.ui.scroll_down(self.results.len()),
+            MouseEventKind::ScrollUp => self.ui.scroll_up(),
             MouseEventKind::Moved => {
                 let top_pad = self.theme.padding_list.2;
-                let offset = self.list_state.offset();
+                let offset = self.ui.list_state.offset();
                 let hovered = mouse.row.saturating_sub(top_pad) as usize + offset;
                 if hovered < self.results.len() {
-                    self.list_state.select(Some(hovered));
+                    self.ui.list_state.select(Some(hovered));
                 }
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 let top_pad = self.theme.padding_list.2;
-                let offset = self.list_state.offset();
+                let offset = self.ui.list_state.offset();
                 let clicked = mouse.row.saturating_sub(top_pad) as usize + offset;
                 if clicked < self.results.len() {
-                    self.list_state.select(Some(clicked));
+                    self.ui.list_state.select(Some(clicked));
                     return self.select_current();
                 }
             }
@@ -238,113 +217,12 @@ impl Application {
         true
     }
 
-    fn scroll_down(&mut self) {
-        let max_offset = self.results.len().saturating_sub(1);
-        let offset = self.list_state.offset_mut();
-        *offset = (*offset + 1).min(max_offset);
-    }
-
-    fn scroll_up(&mut self) {
-        let offset = self.list_state.offset_mut();
-        *offset = offset.saturating_sub(1);
-    }
-
-    fn select_next(&mut self) {
-        let len = self.results.len();
-        if len == 0 {
-            return;
-        }
-        let next = self
-            .list_state
-            .selected()
-            .map(|i| (i + 1) % len)
-            .unwrap_or(0);
-        self.list_state.select(Some(next));
-    }
-
-    fn select_prev(&mut self) {
-        let len = self.results.len();
-        if len == 0 {
-            return;
-        }
-        let prev = self
-            .list_state
-            .selected()
-            .map(|i| if i == 0 { len - 1 } else { i - 1 })
-            .unwrap_or(0);
-        self.list_state.select(Some(prev));
-    }
-
     fn select_current(&mut self) -> bool {
-        if let Some(selected) = self.list_state.selected()
-            && let Some(name) = self.results.get(selected).cloned()
-            && let Some(entry) = self.entries.get(&name)
-        {
-            self.exec = Some(entry.exec.clone());
-            self.name = Some(name);
-            self.is_term = entry.is_term;
+        if let Some(selected) = self.ui.list_state.selected() {
+            self.selected = self.results.get(selected).map(|r| r.0);
             return false;
         }
         true
-    }
-
-    fn draw(&mut self, frame: &mut ratatui::Frame) {
-        let t = &self.theme;
-
-        let chunks =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(t.search_bar_height)])
-                .split(frame.area());
-
-        let count_str = format!("{}/{}", self.results.len(), self.entries.len());
-        let count_width = count_str.len() as u16 + t.padding_search.0 + t.padding_search.1;
-
-        let search_chunks =
-            Layout::horizontal([Constraint::Min(0), Constraint::Length(count_width)])
-                .split(chunks[1]);
-
-        let items: Vec<ListItem> = self
-            .results
-            .iter()
-            .map(|name| ListItem::new(Line::from(Span::raw(name.as_str())).style(t.item_normal)))
-            .collect();
-
-        let list = List::new(items)
-            .highlight_style(t.item_selected)
-            .highlight_symbol(&*t.highlight_symbol)
-            .block(Block::default().padding(t.list_padding()));
-
-        frame.render_stateful_widget(list, chunks[0], &mut self.list_state);
-
-        let cursor = if self.cursor_visible {
-            Span::styled("⎸", t.cursor)
-        } else {
-            Span::raw(" ")
-        };
-
-        let search_text = if self.query.is_empty() {
-            Line::from(vec![
-                Span::styled(&t.prompt_str, t.prompt),
-                Span::styled(&t.placeholder_str, t.placeholder),
-            ])
-        } else {
-            Line::from(vec![
-                Span::styled(&t.prompt_str, t.prompt),
-                Span::raw(self.query.as_str()),
-                cursor,
-            ])
-        };
-
-        frame.render_widget(
-            Paragraph::new(search_text).block(Block::default().padding(t.search_padding())),
-            search_chunks[0],
-        );
-
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(count_str, t.count)))
-                .alignment(ratatui::layout::Alignment::Right)
-                .block(Block::default().padding(t.search_padding())),
-            search_chunks[1],
-        );
     }
 }
 

@@ -1,6 +1,6 @@
-use crate::desktop::EntryHistory;
-
 use super::entry::Entry;
+use crate::desktop::EntryHistory;
+use std::{collections::HashSet, ops::Index};
 
 pub struct EntryCollection {
     entries: Vec<Entry>,
@@ -29,61 +29,43 @@ impl EntryCollection {
         collection
     }
 
-    pub fn search(&self, query: &str, history: Option<&EntryHistory>) -> Vec<&Entry> {
+    pub fn search(&self, query: &str, history: &EntryHistory, out: &mut Vec<(usize, usize)>) {
+        out.clear();
+
         if query.is_empty() {
-            let mut entries: Vec<&Entry> = self.entries.iter().collect();
-            if let Some(h) = history {
-                entries.sort_by_key(|e| std::cmp::Reverse(h[&e.name]));
-            }
-            return entries;
+            out.extend((0..self.entries.len()).map(|i| (i, 0)));
+            out.sort_by_key(|&(i, _)| std::cmp::Reverse(history[&*self.entries[i].name]));
+            return;
         }
 
         let q = query.to_lowercase();
-        let mut seen = std::collections::HashSet::new();
-        let mut results: Vec<(&Entry, usize)> = self
-            .entries
-            .iter()
-            .filter_map(|e| {
-                let name = e.name.to_lowercase();
+        let mut seen: HashSet<&str> = HashSet::new();
+        for (i, e) in self.entries.iter().enumerate() {
+            if !seen.insert(&e.name) {
+                continue;
+            }
 
-                if !seen.insert(name.clone()) {
-                    return None;
-                }
+            let best_span = std::iter::once(e.name.as_ref())
+                .chain(e.keywords.iter().map(|k| k.as_ref()))
+                .filter_map(|s| match_span(s, &q))
+                .min();
 
-                let best_span = std::iter::once(name.as_str())
-                    .chain(e.keywords.iter().map(|k| k.as_str()))
-                    .filter_map(|s| match_span(&s.to_lowercase(), &q))
-                    .min();
+            if let Some(span) = best_span {
+                let usage = history[&e.name];
 
-                best_span.map(|span| {
-                    let usage = history.map(|h| h[&e.name]).unwrap_or(0);
+                /* NOTE:
+                 * on TIGHTNESS_WEIGHT lower  IS better
+                 * on USAGE_WEIGHT     higher IS better
+                 */
+                const TIGHTNESS_WEIGHT: usize = 100;
+                const USAGE_WEIGHT: usize = 30;
 
-                    /* NOTE:
-                     * on TIGHTNESS_WEIGHT lower  IS better
-                     * on USAGE_WEIGHT     higher IS better
-                     */
-                    const TIGHTNESS_WEIGHT: usize = 100;
-                    const USAGE_WEIGHT: usize = 30;
-
-                    let score =
-                        (span * TIGHTNESS_WEIGHT).saturating_sub(usage as usize * USAGE_WEIGHT);
-                    (e, score)
-                })
-            })
-            .collect();
-
-        results.sort_by_key(|(_, span)| *span);
-        results.into_iter().map(|(e, _)| e).collect()
-    }
-
-    pub fn get(&self, name: &str) -> Option<&Entry> {
-        for entry in &self.entries {
-            if entry.name == name {
-                return Some(&entry);
+                let score = (span * TIGHTNESS_WEIGHT).saturating_sub(usage as usize * USAGE_WEIGHT);
+                out.push((i, score));
             }
         }
 
-        None
+        out.sort_by_key(|(_, span)| *span);
     }
 
     pub fn len(&self) -> usize {
@@ -117,29 +99,38 @@ impl EntryCollection {
     }
 }
 
+impl Index<usize> for EntryCollection {
+    type Output = Entry;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.entries[index]
+    }
+}
+
 fn match_span(haystack: &str, query: &str) -> Option<usize> {
     if haystack.trim().is_empty() {
         return None;
     }
 
-    let haystack: Vec<char> = haystack.chars().collect();
-    let query: Vec<char> = query.chars().collect();
-
-    let mut qi = 0;
-    let mut start = None;
+    let mut query_chars = query.chars().peekable();
+    let mut start: Option<usize> = None;
     let mut end = 0;
 
-    for (i, &h) in haystack.iter().enumerate() {
-        if qi < query.len() && h == query[qi] {
+    for (i, hc) in haystack.chars().enumerate() {
+        let Some(&qc) = query_chars.peek() else {
+            break;
+        };
+
+        if hc.to_lowercase().next().unwrap_or(hc) == qc {
             if start.is_none() {
                 start = Some(i);
             }
             end = i;
-            qi += 1;
+            query_chars.next();
         }
     }
 
-    if qi == query.len() {
+    if query_chars.peek().is_none() {
         Some(end - start.unwrap_or(0))
     } else {
         None
