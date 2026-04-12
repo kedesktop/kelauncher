@@ -18,17 +18,21 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Theme {
-            prompt:           Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            cursor:           Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            count:            Style::default().fg(Color::from_u32(0x555555)),
-            placeholder:      Style::default().fg(Color::from_u32(0x555555)),
-            item_normal:      Style::default().fg(Color::from_u32(0x777777)),
-            item_selected:    Style::default().fg(Color::White),
+            prompt: Style::default()
+                .fg(Color::from_u32(0x768fa2))
+                .add_modifier(Modifier::BOLD),
+            cursor: Style::default()
+                .fg(Color::from_u32(0x768fa2))
+                .add_modifier(Modifier::BOLD),
+            count: Style::default().fg(Color::from_u32(0x555555)),
+            placeholder: Style::default().fg(Color::from_u32(0x555555)),
+            item_normal: Style::default().fg(Color::from_u32(0x777777)),
+            item_selected: Style::default().fg(Color::White),
             highlight_symbol: String::new(),
-            padding_list:     (3, 3, 1, 0),
-            padding_search:   (2, 2, 1, 0),
-            prompt_str:       "> ".to_owned(),
-            placeholder_str:  "search...".to_owned(),
+            padding_list: (3, 3, 1, 0),
+            padding_search: (2, 2, 1, 0),
+            prompt_str: "> ".to_owned(),
+            placeholder_str: "search...".to_owned(),
             search_bar_height: 2,
         }
     }
