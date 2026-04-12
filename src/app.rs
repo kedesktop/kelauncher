@@ -1,5 +1,7 @@
 use std::{
-    io::Error, os::unix::process::CommandExt, process::{Command, Stdio}
+    io::Error,
+    os::unix::process::CommandExt,
+    process::{Command, Stdio},
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
@@ -16,24 +18,40 @@ use crate::desktop;
 pub struct Application {
     list_state: ListState,
     query: String,
+
     entries: desktop::EntryCollection,
+    history: desktop::EntryHistory,
 
     results: Vec<String>,
     exec: Option<String>,
+    name: Option<String>,
     is_term: bool,
 }
 
 impl Application {
     pub fn new() -> Application {
         let entries = desktop::EntryCollection::collect();
-        let results = entries.search("").iter().map(|e| e.name.clone()).collect();
+        let history = desktop::EntryHistory::parse();
+
+        if history.is_err() {
+            eprintln!("Failed to parse history file: {}", history.err().unwrap());
+            std::process::exit(1);
+        }
+
+        let results = entries
+            .search("", None)
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
 
         Application {
             list_state: ListState::default().with_selected(Some(0)),
             query: String::new(),
             entries,
+            history: history.ok().unwrap(),
             results,
             exec: None,
+            name: None,
             is_term: false,
         }
     }
@@ -52,10 +70,12 @@ impl Application {
         }
     }
 
-    fn execute(&self) -> bool {
+    fn execute(&mut self) -> bool {
         if let Some(exec) = &self.exec {
             if self.is_term {
                 notify_error(Command::new("sh").arg("-c").arg(exec).exec());
+                self.save();
+
                 return false;
             }
 
@@ -71,10 +91,19 @@ impl Application {
             if let Err(e) = result {
                 notify_error(e);
             }
+            self.save();
 
             return true;
         }
-        return false;
+
+        false
+    }
+
+    fn save(&mut self) {
+        self.history[self.name.as_ref().unwrap()] += 1;
+        if let Err(err) = self.history.save() {
+            eprintln!("Failed to save history: {}", err);
+        }
     }
 
     fn delete_last_word(&mut self) {
@@ -94,7 +123,7 @@ impl Application {
     fn refresh_results(&mut self) {
         self.results = self
             .entries
-            .search(&self.query)
+            .search(&self.query, Some(&self.history))
             .iter()
             .map(|e| e.name.clone())
             .collect();
@@ -159,10 +188,13 @@ impl Application {
                 }
                 KeyCode::Enter => {
                     if let Some(selected) = self.list_state.selected() {
-                        if let Some(entry) = self.entries.search(&self.query).get(selected) {
-                            self.exec = Some(entry.exec.clone());
-                            self.is_term = entry.is_term;
-                            return false;
+                        if let Some(name) = self.results.get(selected) {
+                            if let Some(entry) = self.entries.get(name) {
+                                self.exec = Some(entry.exec.clone());
+                                self.name = Some(name.clone());
+                                self.is_term = entry.is_term;
+                                return false;
+                            }
                         }
                     }
                 }
@@ -217,11 +249,11 @@ impl Application {
 
 fn notify_error(e: Error) {
     notify_rust::Notification::new()
-                    .appname("KeDesktop::KeLaunch")
-                    .summary("Error occured")
-                    .body(format!("Failed to launch: {e}").as_str())
-                    .show()
-                    .unwrap();
+        .appname("KeDesktop::KeLaunch")
+        .summary("Error occured")
+        .body(format!("Failed to launch: {e}").as_str())
+        .show()
+        .unwrap();
 }
 
 fn is_word_bound(c: char) -> bool {

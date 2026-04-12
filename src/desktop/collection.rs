@@ -1,4 +1,4 @@
-use std::{env, fs};
+use crate::desktop::EntryHistory;
 
 use super::entry::Entry;
 
@@ -29,7 +29,7 @@ impl EntryCollection {
         collection
     }
 
-    pub fn search(&self, query: &str) -> Vec<&Entry> {
+    pub fn search(&self, query: &str, history: Option<&EntryHistory>) -> Vec<&Entry> {
         if query.is_empty() {
             return self.entries.iter().collect();
         }
@@ -51,7 +51,12 @@ impl EntryCollection {
                     .filter_map(|s| match_span(&s.to_lowercase(), &q))
                     .min();
 
-                best_span.map(|span| (e, span))
+                best_span.map(|span| {
+                    let usage = history.map(|h| h[&e.name]).unwrap_or(0);
+                    /* scale span up, subtract weighted usage so higher usage = lower sort key */
+                    let score = (span * 10).saturating_sub(usage as usize * 3);
+                    (e, score)
+                })
             })
             .collect();
 
@@ -59,14 +64,24 @@ impl EntryCollection {
         results.into_iter().map(|(e, _)| e).collect()
     }
 
-    fn get_applications_dirs() -> Vec<String> {
-        let home = env::var("HOME").expect("$HOME is not in UTF-8");
+    pub fn get(&self, name: &str) -> Option<&Entry> {
+        for entry in &self.entries {
+            if entry.name == name {
+                return Some(&entry);
+            }
+        }
 
-        let data_dirs =
-            env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".to_owned());
+        None
+    }
+
+    fn get_applications_dirs() -> Vec<String> {
+        let home = std::env::var("HOME").expect("$HOME is not in UTF-8");
+
+        let data_dirs = std::env::var("XDG_DATA_DIRS")
+            .unwrap_or_else(|_| "/usr/local/share:/usr/share".to_owned());
 
         let data_home =
-            env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{home}/.local/share"));
+            std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{home}/.local/share"));
 
         let mut dirs: Vec<String> = std::iter::once(data_home.as_str())
             .chain(data_dirs.split(':'))
@@ -81,7 +96,7 @@ impl EntryCollection {
         dirs.into_iter()
             .filter(|d| seen.insert(d.clone()))
             .map(|d| format!("{d}/applications"))
-            .filter(|d| fs::metadata(d).map_or(false, |md| md.is_dir()))
+            .filter(|d| std::fs::metadata(d).map_or(false, |md| md.is_dir()))
             .collect()
     }
 }
