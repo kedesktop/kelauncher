@@ -20,7 +20,7 @@ impl EntryCollection {
                     .filter_map(|e| e.ok())
                     .filter(|e| {
                         e.file_type().is_file()
-                            && e.path().extension().map_or(false, |ext| ext == "desktop")
+                            && e.path().extension().is_some_and(|ext| ext == "desktop")
                     })
                     .filter_map(|e| Entry::from_file(e.path())),
             );
@@ -94,7 +94,7 @@ impl EntryCollection {
         dirs.into_iter()
             .filter(|d| seen.insert(d.clone()))
             .map(|d| format!("{d}/applications"))
-            .filter(|d| std::fs::metadata(d).map_or(false, |md| md.is_dir()))
+            .filter(|d| std::fs::metadata(d).is_ok_and(|md| md.is_dir()))
             .collect()
     }
 }

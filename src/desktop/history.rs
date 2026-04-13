@@ -41,10 +41,11 @@ impl EntryHistory {
             if line.is_empty() {
                 continue;
             }
-            if let Some((num, name)) = line.split_once(' ') {
-                if let Ok(n) = num.parse::<u32>() {
-                    self.entries.insert(name.trim().into(), n);
-                }
+
+            if let Some((num, name)) = line.split_once(' ')
+                && let Ok(n) = num.parse::<u32>()
+            {
+                self.entries.insert(name.trim().into(), n);
             }
         }
 

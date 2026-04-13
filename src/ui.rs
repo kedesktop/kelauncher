@@ -10,9 +10,6 @@ pub struct AppUI {
     pub list_state: ListState,
     cached_items: Vec<ListItem<'static>>,
     items_dirty: bool,
-
-    cursor_visible: bool,
-    last_blink: std::time::Instant,
 }
 
 impl AppUI {
@@ -21,23 +18,11 @@ impl AppUI {
             list_state: ListState::default().with_selected(Some(0)),
             cached_items: Vec::new(),
             items_dirty: true,
-            cursor_visible: true,
-            last_blink: std::time::Instant::now(),
         }
     }
 
     pub fn mark_dirty(&mut self) {
         self.items_dirty = true;
-    }
-
-    /** Is called once every frame, will return true if a redraw is needed */
-    pub fn tick(&mut self, blink_time: u64) -> bool {
-        if self.last_blink.elapsed() >= std::time::Duration::from_millis(blink_time) {
-            self.cursor_visible = !self.cursor_visible;
-            self.last_blink = std::time::Instant::now();
-            return true;
-        }
-        false
     }
 
     pub fn select_next(&mut self, results_len: usize) {
@@ -115,12 +100,6 @@ impl AppUI {
 
         frame.render_stateful_widget(list, chunks[0], &mut self.list_state);
 
-        let cursor = if self.cursor_visible {
-            Span::styled("⎸", t.cursor)
-        } else {
-            Span::raw(" ")
-        };
-
         let search_text = if query.is_empty() {
             Line::from(vec![
                 Span::styled(&t.prompt_str, t.prompt),
@@ -130,7 +109,6 @@ impl AppUI {
             Line::from(vec![
                 Span::styled(&t.prompt_str, t.prompt),
                 Span::raw(query.to_owned()),
-                cursor,
             ])
         };
 
@@ -138,6 +116,15 @@ impl AppUI {
             Paragraph::new(search_text).block(Block::default().padding(t.search_padding())),
             search_chunks[0],
         );
+
+        let cursor_x = search_chunks[0].x
+            + t.padding_search.0
+            + t.prompt_str.chars().count() as u16
+            + query.chars().count() as u16;
+
+        let cursor_y = chunks[1].y + t.padding_search.2;
+
+        frame.set_cursor_position((cursor_x, cursor_y));
 
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(count_str, t.count)))

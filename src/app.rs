@@ -54,11 +54,13 @@ impl Application {
         execute!(std::io::stdout(), EnableMouseCapture).ok();
 
         ratatui::run(|terminal| {
+            terminal.show_cursor().ok();
             loop {
                 if !self.on_frame(terminal) {
                     break;
                 }
             }
+            terminal.hide_cursor().ok();
         });
 
         execute!(std::io::stdout(), DisableMouseCapture).ok();
@@ -128,23 +130,24 @@ impl Application {
     }
 
     fn on_frame(&mut self, terminal: &mut ratatui::Terminal<impl Backend>) -> bool {
-        self.ui.tick(self.theme.cursor_blink_time);
-
         let _ = terminal.draw(|f| {
             self.ui
                 .draw(f, &self.theme, &self.entries, &self.results, &self.query)
         });
 
-        if event::poll(std::time::Duration::from_millis(16)).unwrap_or(false) {
-            if let Ok(ev) = event::read() {
-                match ev {
-                    Event::Key(key) => return self.handle_key(key),
-                    Event::Mouse(mouse) => return self.handle_mouse(mouse),
-                    _ => {}
-                }
-            }
+        if !event::poll(std::time::Duration::from_millis(16)).unwrap_or(false) {
+            return true;
         }
-        true
+
+        let Ok(ev) = event::read() else {
+            return true;
+        };
+
+        match ev {
+            Event::Key(key) => self.handle_key(key),
+            Event::Mouse(mouse) => self.handle_mouse(mouse),
+            _ => true,
+        }
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {

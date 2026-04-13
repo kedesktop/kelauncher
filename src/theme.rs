@@ -2,8 +2,6 @@ use ratatui::style::{Color, Modifier, Style};
 
 pub struct Theme {
     pub prompt: Style,
-    pub cursor: Style,
-    pub cursor_blink_time: u64,
     pub count: Style,
     pub placeholder: Style,
     pub item_normal: Style,
@@ -22,10 +20,6 @@ impl Default for Theme {
             prompt: Style::default()
                 .fg(Color::from_u32(0x768fa2))
                 .add_modifier(Modifier::BOLD),
-            cursor: Style::default()
-                .fg(Color::from_u32(0x768fa2))
-                .add_modifier(Modifier::BOLD),
-            cursor_blink_time: 500,
             count: Style::default().fg(Color::from_u32(0x555555)),
             placeholder: Style::default().fg(Color::from_u32(0x555555)),
             item_normal: Style::default().fg(Color::from_u32(0x777777)),
