@@ -31,17 +31,15 @@ impl EntryCollection {
         collection
     }
 
-    pub fn search(&self, query: &str, history: &EntryHistory, out: &mut Vec<(usize, usize)>) {
-        out.clear();
-
+    pub fn search(&self, query: &str, history: &EntryHistory) -> Option<usize> {
         if query.is_empty() {
-            out.extend((0..self.entries.len()).map(|i| (i, 0)));
-            out.sort_by_key(|&(i, _)| std::cmp::Reverse(history[self.entries[i].get_name()]));
-            return;
+            return (0..self.entries.len()).max_by_key(|&i| history[self.entries[i].get_name()]);
         }
 
         let q = query.to_lowercase();
         let mut seen: HashSet<&str> = HashSet::new();
+        let mut best: Option<(usize, usize)> = None; /* (index, score) */
+
         for (i, e) in self.entries.iter().enumerate() {
             if !seen.insert(e.get_name()) {
                 continue;
@@ -52,26 +50,26 @@ impl EntryCollection {
                 .filter_map(|s| match_span(s, &q))
                 .min();
 
-            if let Some(span) = best_span {
-                let usage = history[e.get_name()];
+            let Some(span) = best_span else {
+                continue;
+            };
 
-                /* NOTE:
-                 * on TIGHTNESS_WEIGHT lower  IS better
-                 * on USAGE_WEIGHT     higher IS better
-                 */
-                const TIGHTNESS_WEIGHT: usize = 100;
-                const USAGE_WEIGHT: usize = 30;
+            let usage = history[e.get_name()];
 
-                let score = (span * TIGHTNESS_WEIGHT).saturating_sub(usage as usize * USAGE_WEIGHT);
-                out.push((i, score));
+            /* NOTE:
+             * on TIGHTNESS_WEIGHT lower  IS better
+             * on USAGE_WEIGHT     higher IS better
+             */
+            const TIGHTNESS_WEIGHT: usize = 100;
+            const USAGE_WEIGHT: usize = 30;
+
+            let score = (span * TIGHTNESS_WEIGHT).saturating_sub(usage as usize * USAGE_WEIGHT);
+            if best.map_or(true, |(_, best_score)| score < best_score) {
+                best = Some((i, score));
             }
         }
 
-        out.sort_by_key(|(_, span)| *span);
-    }
-
-    pub fn len(&self) -> usize {
-        self.entries.len()
+        best.map(|(i, _)| i)
     }
 
     fn get_applications_dirs() -> Vec<String> {

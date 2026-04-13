@@ -7,7 +7,6 @@ use std::{
 use crossterm::{
     event::{
         self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
-        MouseButton, MouseEvent, MouseEventKind,
     },
     execute,
 };
@@ -23,8 +22,7 @@ pub struct Application {
     entries: desktop::EntryCollection,
     history: desktop::EntryHistory,
 
-    results: Vec<(usize, usize)>,
-    selected: Option<usize>,
+    result: Option<usize>,
 }
 
 impl Application {
@@ -36,18 +34,14 @@ impl Application {
 
         let entries = desktop::EntryCollection::collect();
 
-        let mut app = Application {
+        Application {
             theme,
             ui: AppUI::new(),
             query: String::new(),
             entries,
             history,
-            results: Vec::new(),
-            selected: None,
-        };
-
-        app.entries.search("", &app.history, &mut app.results);
-        app
+            result: None,
+        }
     }
 
     pub fn run(&mut self) {
@@ -71,7 +65,7 @@ impl Application {
     }
 
     fn execute(&mut self) -> bool {
-        if let Some(idx) = self.selected {
+        if let Some(idx) = self.result {
             let entry = &self.entries[idx];
 
             if entry.is_terminal() {
@@ -101,7 +95,7 @@ impl Application {
     }
 
     fn save(&mut self) {
-        if let Some(idx) = self.selected {
+        if let Some(idx) = self.result {
             self.history[self.entries[idx].get_name()] += 1;
             if let Err(err) = self.history.save() {
                 eprintln!("Failed to save history: {}", err);
@@ -124,17 +118,16 @@ impl Application {
     }
 
     fn refresh_results(&mut self) {
-        self.entries
-            .search(&self.query, &self.history, &mut self.results);
-        self.ui.mark_dirty();
-        self.ui.list_state.select(Some(0));
+        self.result = self.entries.search(&self.query, &self.history);
     }
 
     fn on_frame(&mut self, terminal: &mut ratatui::Terminal<impl Backend>) -> bool {
-        let _ = terminal.draw(|f| {
-            self.ui
-                .draw(f, &self.theme, &self.entries, &self.results, &self.query)
-        }).ok();
+        let _ = terminal
+            .draw(|f| {
+                self.ui
+                    .draw(f, &self.theme, &self.entries, &self.result, &self.query)
+            })
+            .ok();
 
         if !event::poll(std::time::Duration::from_millis(16)).unwrap_or(false) {
             return true;
@@ -146,7 +139,6 @@ impl Application {
 
         match ev {
             Event::Key(key) => self.handle_key(key),
-            Event::Mouse(mouse) => self.handle_mouse(mouse),
             _ => true,
         }
     }
@@ -164,7 +156,10 @@ impl Application {
                             self.query.clear();
                             self.refresh_results();
                         }
-                        'q' => return false,
+                        'q' => {
+                            self.result = None;
+                            return false;
+                        }
                         _ => {}
                     }
                     return true;
@@ -181,50 +176,17 @@ impl Application {
                 self.refresh_results();
             }
             KeyCode::Tab => {
-                if let Some(&top) = self.results.first() {
-                    self.query = self.entries[top.0].get_localized_name().to_string();
+                if let Some(res) = self.result {
+                    self.query = self.entries[res].get_localized_name().to_string();
                     self.refresh_results();
                 }
             }
-            KeyCode::Down => self.ui.select_next(self.results.len()),
-            KeyCode::Up => self.ui.select_prev(self.results.len()),
-            KeyCode::Enter => return self.select_current(),
-            KeyCode::Esc => return false,
-            _ => {}
-        }
-        true
-    }
-
-    fn handle_mouse(&mut self, mouse: MouseEvent) -> bool {
-        match mouse.kind {
-            MouseEventKind::ScrollDown => self.ui.scroll_down(self.results.len()),
-            MouseEventKind::ScrollUp => self.ui.scroll_up(),
-            MouseEventKind::Moved => {
-                let top_pad = self.theme.padding_list.2;
-                let offset = self.ui.list_state.offset();
-                let hovered = mouse.row.saturating_sub(top_pad) as usize + offset;
-                if hovered < self.results.len() {
-                    self.ui.list_state.select(Some(hovered));
-                }
-            }
-            MouseEventKind::Down(MouseButton::Left) => {
-                let top_pad = self.theme.padding_list.2;
-                let offset = self.ui.list_state.offset();
-                let clicked = mouse.row.saturating_sub(top_pad) as usize + offset;
-                if clicked < self.results.len() {
-                    self.ui.list_state.select(Some(clicked));
-                    return self.select_current();
-                }
+            KeyCode::Enter => return false,
+            KeyCode::Esc => {
+                self.result = None;
+                return false;
             }
             _ => {}
-        }
-        true
-    }
-
-    fn select_current(&mut self) -> bool {
-        if let Some(selected) = self.ui.list_state.selected() {
-            self.selected = self.results.get(selected).map(|r| r.0);
-            return false;
         }
         true
     }
