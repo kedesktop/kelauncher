@@ -74,15 +74,15 @@ impl Application {
         if let Some(idx) = self.selected {
             let entry = &self.entries[idx];
 
-            if entry.is_term {
-                notify_error(Command::new("sh").arg("-c").arg(entry.exec.as_ref()).exec());
+            if entry.is_terminal() {
+                notify_error(Command::new("sh").arg("-c").arg(entry.get_exec()).exec());
                 self.save();
                 return false;
             }
 
             let result = Command::new("sh")
                 .arg("-c")
-                .arg(entry.exec.as_ref())
+                .arg(entry.get_exec())
                 .stderr(Stdio::null())
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
@@ -92,6 +92,7 @@ impl Application {
             if let Err(e) = result {
                 notify_error(e);
             }
+
             self.save();
             return true;
         }
@@ -101,7 +102,7 @@ impl Application {
 
     fn save(&mut self) {
         if let Some(idx) = self.selected {
-            self.history[&*self.entries[idx].name] += 1;
+            self.history[self.entries[idx].get_name()] += 1;
             if let Err(err) = self.history.save() {
                 eprintln!("Failed to save history: {}", err);
             }
@@ -133,7 +134,7 @@ impl Application {
         let _ = terminal.draw(|f| {
             self.ui
                 .draw(f, &self.theme, &self.entries, &self.results, &self.query)
-        });
+        }).ok();
 
         if !event::poll(std::time::Duration::from_millis(16)).unwrap_or(false) {
             return true;
@@ -181,7 +182,7 @@ impl Application {
             }
             KeyCode::Tab => {
                 if let Some(&top) = self.results.first() {
-                    self.query = self.entries[top.0].name.to_string();
+                    self.query = self.entries[top.0].get_localized_name().to_string();
                     self.refresh_results();
                 }
             }

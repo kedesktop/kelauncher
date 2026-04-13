@@ -73,7 +73,8 @@ impl AppUI {
                 .iter()
                 .map(|&(i, _)| {
                     ListItem::new(
-                        Line::from(Span::raw(entries[i].name.to_string())).style(theme.item_normal),
+                        Line::from(Span::raw(entries[i].get_localized_name().to_string()))
+                            .style(theme.item_normal),
                     )
                 })
                 .collect();

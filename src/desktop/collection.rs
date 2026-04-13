@@ -1,5 +1,5 @@
 use super::entry::Entry;
-use crate::desktop::EntryHistory;
+use crate::desktop::{EntryHistory, locale::Locale};
 use std::{collections::HashSet, ops::Index};
 
 pub struct EntryCollection {
@@ -12,6 +12,8 @@ impl EntryCollection {
             entries: Vec::new(),
         };
 
+        let locale = Locale::from_env();
+
         for dir in Self::get_applications_dirs() {
             collection.entries.extend(
                 walkdir::WalkDir::new(dir)
@@ -22,7 +24,7 @@ impl EntryCollection {
                         e.file_type().is_file()
                             && e.path().extension().is_some_and(|ext| ext == "desktop")
                     })
-                    .filter_map(|e| Entry::from_file(e.path())),
+                    .filter_map(|e| Entry::from_file(e.path(), &locale)),
             );
         }
 
@@ -34,24 +36,24 @@ impl EntryCollection {
 
         if query.is_empty() {
             out.extend((0..self.entries.len()).map(|i| (i, 0)));
-            out.sort_by_key(|&(i, _)| std::cmp::Reverse(history[&*self.entries[i].name]));
+            out.sort_by_key(|&(i, _)| std::cmp::Reverse(history[self.entries[i].get_name()]));
             return;
         }
 
         let q = query.to_lowercase();
         let mut seen: HashSet<&str> = HashSet::new();
         for (i, e) in self.entries.iter().enumerate() {
-            if !seen.insert(&e.name) {
+            if !seen.insert(e.get_name()) {
                 continue;
             }
 
-            let best_span = std::iter::once(e.name.as_ref())
-                .chain(e.keywords.iter().map(|k| k.as_ref()))
+            let best_span = std::iter::once(e.get_localized_name())
+                .chain(e.get_keywords().iter().map(|k| k.as_ref()))
                 .filter_map(|s| match_span(s, &q))
                 .min();
 
             if let Some(span) = best_span {
-                let usage = history[&e.name];
+                let usage = history[e.get_name()];
 
                 /* NOTE:
                  * on TIGHTNESS_WEIGHT lower  IS better
@@ -121,7 +123,7 @@ fn match_span(haystack: &str, query: &str) -> Option<usize> {
             break;
         };
 
-        if hc.to_lowercase().next().unwrap_or(hc) == qc {
+        if hc.to_lowercase().next().unwrap_or(hc) == qc.to_lowercase().next().unwrap_or(qc) {
             if start.is_none() {
                 start = Some(i);
             }

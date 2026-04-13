@@ -1,6 +1,6 @@
 [package]
 name = "kelaunch"
-version = "1.8.0"
+version = "1.9.0"
 edition = "2024"
 
 [dependencies]
@@ -8,3 +8,6 @@ crossterm = "0.29.0"
 notify-rust = "4.14.0"
 ratatui = "0.30.0"
 walkdir = "2.5.0"
+
+[features]
+localized = []
